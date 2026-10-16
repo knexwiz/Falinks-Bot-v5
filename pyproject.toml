@@ -1,0 +1,12 @@
+[project]
+name = "falinks-bot-v5"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "disnake>=2.12.2",
+    "google-api-python-client>=2.201.0",
+    "gspread>=6.2.1",
+    "pandas>=3.0.6",
+    "pygithub>=2.10.0",
+    "python-dotenv>=1.2.4",
+]

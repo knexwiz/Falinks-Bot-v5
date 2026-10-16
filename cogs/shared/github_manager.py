@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-import github_manager
+import github
 
 load_dotenv(dotenv_path=".venv/.env")
 git_token = os.getenv("GITHUB_TOKEN")

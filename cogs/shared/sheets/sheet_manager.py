@@ -1,15 +1,10 @@
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import json
 from pathlib import Path
 
 script_dir = Path(__file__).parent
 
-gspread_client = gspread.authorize(
-    ServiceAccountCredentials.from_json_keyfile_name(script_dir / 'gspread.json', [
-        'https://spreadsheets.google.com/feeds',
-        'https://www.googleapis.com/auth/drive'
-    ]))
+gspread_client = gspread.service_account(script_dir / 'gspread.json')
 
 f = open(script_dir / 'guild_masters.json', 'r')
 guild_masters = json.load(f)
