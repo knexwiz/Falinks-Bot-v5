@@ -19,7 +19,7 @@ from cogs.shared.team import Team
 from cogs.shared.season import Season
 from cogs.shared.season import Match
 from cogs.shared.team import initialize as initialize_teams
-from cogs.shared.github import upload_to_git
+from cogs.shared.github_manager import upload_to_git
 
 from cogs.shared.season import SeasonSelector
 
