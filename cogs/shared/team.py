@@ -117,10 +117,10 @@ class Team:
         except ValueError:
             i = 0
 
-        while f"{s}{i:02X}" in player_ids:
+        while f"{s}{i:02d}" in player_ids:
             i += 1
 
-        return f"{s}{i:02X}"
+        return f"{s}{i:02d}"
 
     @staticmethod
     def pseudo(member: disnake.Member | disnake.User, role: disnake.Role) -> Team | None:
