@@ -174,8 +174,10 @@ class Season:
             # noinspection PyTypeChecker
             return self.point_cap - sum([self.tier(pokemon) for pokemon in self.roster(team)])
 
-    def available(self, pokemon: Pokemon) -> bool:
-        if not (pokemon.dex in self.tiers): return False
+    def available(self, pokemon: Pokemon | str) -> bool:
+        if isinstance(pokemon, str):
+            if pokemon not in self.tiers: return False
+        elif not (pokemon.dex in self.tiers): return False
         for r in self.rosters.values():
             if pokemon in r: return False
         return True

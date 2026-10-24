@@ -1,8 +1,9 @@
 import math
-
+import random
 import gspread
 
 from cogs.shared.auto_imports import *
+from cogs.shared.season import Season
 
 
 class Cog(commands.Cog, name="Draft"):
@@ -65,17 +66,33 @@ class Cog(commands.Cog, name="Draft"):
         """
         await interaction.response.defer()
 
-        poke = Pokemon.get(pokemon)
-        if not poke:
-            await interaction.send(f"{Pokemon} is not a Pokémon...")
-            return
+
         if not Draft.current:
             await interaction.send(f"There's no draft happening right now...")
             return
 
-
-        current_team = Draft.current.current_pick
         season = Draft.current.season
+        current_team = Draft.current.current_pick
+
+        if pokemon.casefold().startswith("random") and override:
+            if season.draft_type == "Tier":
+                if pokemon[-1].upper() in season.picks_per_tier.keys():
+                    needed_tier = pokemon[-1].upper()
+                else:
+                    needed_tier = [t for t in season.picks_per_tier.keys()
+                                    if season.picks_per_tier[t] >
+                                    len([p for p in season.roster(current_team) if season.tier(p) == t])][0]
+                choices = [p for p in season.tiers.keys() if season.tiers[p] == needed_tier and season.available(p)]
+            else:
+                choices = [p for p in season.tiers.keys() if season.available(p)]
+            poke = Pokemon.get(random.choice(choices))
+        else:
+            poke = Pokemon.get(pokemon)
+
+        if not poke:
+            await interaction.send(f"{Pokemon} is not a Pokémon...")
+            return
+
         tier = season.tier(poke)
 
         if ((team != current_team) and not (override and
