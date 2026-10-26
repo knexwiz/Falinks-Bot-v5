@@ -89,6 +89,11 @@ class TeamDashboard(View):
         active_seasons = [season for season in team.season_list if season.roster(team)]
 
         e = team.embed
+
+        for season in active_seasons:
+            for mon in season.roster(team):
+                await mon.fetch_emote()
+
         for season in active_seasons: season.roster_embed(team, embed=e)
 
         await end_dashboard_cycle(interaction.channel, embeds=[e])
@@ -567,9 +572,15 @@ class Waiver(Modal):
             return
 
         if self.season.waiver(team = self.team, drop=drop, pickup=pick):
+            embed = self.team.sign(pick.embed)
+            embed.set_footer(
+                text=f"{self.season.tier(pick)} // {embed.footer.text}",
+                icon_url=embed.footer.icon_url
+            )
+
             await end_dashboard_cycle(interaction.channel,
                                       f"{self.team} has dropped {drop.mention}, picking up {pick.mention}!",
-                                      embeds=[self.team.sign(pick.embed)])
+                                      embeds=[embed])
         else:
             await end_dashboard_cycle(interaction.channel, f"{interaction.author.mention}: "
                                          f"{pick.mention} is not an available pokemon...")

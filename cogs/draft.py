@@ -122,7 +122,13 @@ class Cog(commands.Cog, name="Draft"):
 
         await poke.fetch_emote()
 
-        await interaction.send(f"{current_team} has picked {poke.mention}!", embed=current_team.sign(poke.embed))
+        embed = current_team.sign(poke.embed)
+        embed.set_footer(
+            text=f"{tier} // {embed.footer.text}",
+            icon_url=embed.footer.icon_url
+        )
+
+        await interaction.send(f"{current_team} has picked {poke.mention}!", embed=embed)
 
         next_pick = Draft.current.advance()
 

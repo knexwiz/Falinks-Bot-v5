@@ -190,9 +190,10 @@ class Season:
                 self.rosters[team.sheet_id][self.rosters[team.sheet_id].index(drop)] = pickup
                 self.team_sheet.update_cells([cell])
 
-                self.waiver_sheet.append_row(
-                    [team.sheet_id, "", drop.dex, pickup.dex, self.current_week],
-                    table_range='A1')
+                next_row = len(self.waiver_sheet.get_all_values()) + 1
+
+                self.waiver_sheet.insert_row(
+                    [team.sheet_id, "", drop.dex, pickup.dex, self.current_week], index=next_row)
 
                 return True
         return False
@@ -209,9 +210,10 @@ class Season:
                 self.rosters[team2.sheet_id][self.rosters[team2.sheet_id].index(poke2)] = poke1
                 self.team_sheet.update_cells([cell1, cell2])
 
-                self.waiver_sheet.append_row(
-                    [team1.sheet_id, team2.sheet_id, poke1.dex, poke2.dex, self.current_week],
-                    table_range='A1')
+                next_row = len(self.waiver_sheet.get_all_values()) + 1
+
+                self.waiver_sheet.insert_row(
+                    [team1.sheet_id, team2.sheet_id, poke1.dex, poke2.dex, self.current_week], index=next_row)
 
                 return True
         return False
@@ -229,7 +231,10 @@ class Season:
 
     @property
     def current_week(self) -> int:
-        return max([m.week for m in self.matches if m.started])
+        weeks = [m.week for m in self.matches if m.started]
+        if weeks:
+            return max(weeks)
+        else: return 0
 
 
     def reflect_match(self, match: Match) -> None:
