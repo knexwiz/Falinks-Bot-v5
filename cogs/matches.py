@@ -75,14 +75,14 @@ class Cog(commands.Cog, name="Matches"):
                 }
             )
 
-            match.channel = match_channel.id
+            match.channel_id = match_channel.id
 
-            season.reflect_match(match)
+            match.season.reflect_match(match)
 
             await match_channel.send(
-                f"This is the start of the match discussion channel for the week {week} match "
+                f"This is the start of the match discussion channel for the week {match.week} match "
                 f"{match.teams[0]} vs {match.teams[1]}. Use the /report command once you have played.",
-                embeds=[season.roster_embed(match.teams[0]), season.roster_embed(match.teams[1])]
+                embeds=[match.season.roster_embed(match.teams[0]), match.season.roster_embed(match.teams[1])]
             )
 
         else:

@@ -219,7 +219,9 @@ class Season:
         return False
 
     def matches_by_week(self, week: int) -> list[Match]:
-        return [match for match in self.match_list if match.week == week]
+        mmm = [match for match in self.matches if match.week == week]
+        print(mmm)
+        return mmm
 
     @staticmethod
     def get_match(channel_id: int) -> Match | None:
@@ -340,7 +342,7 @@ class Match:
 
     @property
     def started(self) -> bool:
-        return self.channel_id is None
+        return self.channel_id is not None
 
     @property
     def finished(self) -> bool:

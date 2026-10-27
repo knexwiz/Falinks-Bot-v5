@@ -494,7 +494,7 @@ class Signup_Button(Button):
 class Waiver_Button(Button):
     def __init__(self):
         super().__init__(
-            label= f"Waiver Pokémon",
+            label= f"Wiaver Pokémon",
             style=ButtonStyle.red,
             emoji=Emote.TORKOAL_ANGRY
         )
