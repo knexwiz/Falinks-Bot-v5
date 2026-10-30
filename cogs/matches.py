@@ -124,6 +124,9 @@ class Cog(commands.Cog, name="Matches"):
             await interaction.response.send_message("This isn't a match channel...", ephemeral=True)
             return
 
+        for pokemon in match.season.roster(team):
+            await pokemon.fetch_emote()
+
         await interaction.response.send_modal(KOStart(match, team))
 
 class ReportView(View):
@@ -253,7 +256,7 @@ class KO_View(View):
     def __init__(self, kos: KO_Counter):
         self.kos = kos
 
-        super().__init__()
+        super().__init__(timeout=None)
 
         for mon in self.kos.pokemon_list:
             self.add_item(KO_Button(self.kos, mon))
