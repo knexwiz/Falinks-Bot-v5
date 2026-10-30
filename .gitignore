@@ -1,3 +1,9 @@
 /cogs/shared/sheets/gspread.json
 /cogs/shared/sheets/guild_masters.json
 /.idea
+/__pycache__
+/cogs/__pycache__
+/cogs/shared/__pycache__
+/cogs/shared/emotes/__pycache__
+/cogs/shared/sheets/__pycache__
+/utils/__pycache
