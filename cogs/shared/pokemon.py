@@ -132,7 +132,7 @@ class Pokemon:
 
     @property
     def emote(self) -> str | None:
-        if self.__emote_cached:
+        if self.__emote_cached is not None:
             return self.__emote_cached
         else:
             if Pokemon.__emote_guilds is not None:
@@ -192,6 +192,7 @@ class Pokemon:
                     emote = await guild.create_custom_emoji(name=self.dex.replace("-", "_"),
                                           image=get_image_bytes(self.image_url))
                     self.__emote_cached = str(emote)
+                    return
                 except disnake.HTTPException, disnake.NotFound, TypeError, ValueError:
                     pass
 
