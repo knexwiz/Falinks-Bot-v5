@@ -94,7 +94,7 @@ class Cog(commands.Cog, name="Matches"):
         if match and next_day > -1:
             view = Schedule(match, result)
 
-        await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == 0 else "F"}>", view=view)
+        await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
 
 
     @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
