@@ -35,6 +35,7 @@ class Cog(commands.Cog, name="Team Manager"):
         team: Filled in from @require_team and hidden from the command registration.
         utc_offset: current offset from UTC
         """
+        await interaction.response.defer()
         team.utc_offset = utc_offset
         team.reflect()
 
