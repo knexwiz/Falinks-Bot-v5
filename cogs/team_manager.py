@@ -24,7 +24,7 @@ class Cog(commands.Cog, name="Team Manager"):
     @require_team(fail_message="In order to track that information, you need to have a team."
                                "Create a team in the Team Dashboard")
     async def set_timezone(self, interaction: SlashInter, team: Team, utc_offset: commands.Range[int, -12, 12],):
-        """Pick the Pokémon you want durring a draft.
+        """Sets your timezone with a UTC Offset.
 
         Parameters
         ----------
