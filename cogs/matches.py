@@ -31,6 +31,7 @@ class Cog(commands.Cog, name="Matches"):
 
         if request_dow in days:
             next_day = 7 - current_day.weekday() + days.index(request_dow)
+            if next_day == 8: next_day = 1
 
         hm = ""
         ap = ""
