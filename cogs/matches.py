@@ -26,12 +26,14 @@ class Cog(commands.Cog, name="Matches"):
 
         request_dow = time_string[0:3]
 
-        next_day = 0
+        next_day = -1
         current_day = datetime.now(timezone(timedelta(hours=team.utc_offset)))
 
         if request_dow in days:
             next_day = 7 - current_day.weekday() + days.index(request_dow)
             if next_day == 8: next_day = 1
+        if request_dow == "tod":
+            next_day=0
 
         hm = ""
         ap = ""
@@ -82,14 +84,14 @@ class Cog(commands.Cog, name="Matches"):
 
         if hours > 23 or hours < 0 or mins > 59 or mins < 0: return
 
-        future_date = current_day + timedelta(days=next_day)
+        future_date = current_day + timedelta(days=next_day if next_day > 0 else 0)
 
         result = future_date.replace(hour=hours, minute=mins, second=0, microsecond=0)
 
         view = None
         match = Season.get_match(message.channel.id)
 
-        if match and next_day:
+        if match and next_day > -1:
             view = Schedule(match, result)
 
         await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == 0 else "F"}>", view=view)
