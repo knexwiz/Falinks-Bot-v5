@@ -1,11 +1,97 @@
 from cogs.shared.auto_imports import *
+from datetime import datetime, timedelta, timezone
 
+days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 class Cog(commands.Cog, name="Matches"):
 
     def __init__(self, bot):
         self.bot = bot
         self.matches_to_post: list[Match] = []
+
+    @commands.Cog.listener()
+    async def on_message(self, message: disnake.Message):
+        if message.author == self.bot.user: return
+
+        team = Team.get(message.author)
+
+        if team is None: return
+
+        start = message.content.find("{")
+        end = message.content.find("}")
+
+        if start == -1 or end == -1: return
+
+        time_string = message.content[start+1:end].casefold()
+
+        request_dow = time_string[0:3]
+
+        next_day = 0
+        current_day = datetime.now(timezone(timedelta(hours=team.utc_offset)))
+
+        if request_dow in days:
+            next_day = 7 - current_day.weekday() + days.index(request_dow)
+
+        hm = ""
+        ap = ""
+        mins = 0
+        hours = 0
+
+        if len(time_string) >= 4 and time_string[-3] == ":":
+            hm = time_string[-5:]
+
+        elif len(time_string) >= 5 and time_string[-4] == ":":
+            ap = time_string[-1]
+            hm = time_string[-6:-1]
+
+        elif len(time_string) >= 6 and time_string[-5] == ":" and time_string[-1] == "m":
+            ap = time_string[-2]
+            hm = time_string[-7:-2]
+
+        elif len(time_string) >= 2 and (time_string[-1] == "p" or time_string[-1] == "a"):
+            ap = time_string[-1]
+            hm = time_string[-3:-1]
+
+        elif len(time_string) >= 3 and time_string[-1] == "m":
+            ap = time_string[-2]
+            hm = time_string[-4:-2]
+
+        else:
+            hm = time_string[-2:]
+
+        if len(hm) > 2:
+            if hm[-2:].isdigit(): mins = int(hm[-2:])
+            else: return
+
+            if hm[-5:-3].isdigit(): hours = int(hm[-5:-3])
+            elif hm[-4].isdigit(): hours = int(hm[-4])
+            else: return
+
+        elif hm:
+            if hm.isdigit(): hours = int(hm)
+            elif hm[-1].isdigit(): hours = int(hm[-1])
+            else: return
+
+        else: return
+
+        if ap:
+            if hours == 12: hours = 0
+            if ap == "p": hours += 12
+            elif ap != "a": return
+
+        if hours > 23 or hours < 0 or mins > 59 or mins < 0: return
+
+        future_date = current_day + timedelta(days=next_day)
+
+        result = future_date.replace(hour=hours, minute=mins, second=0, microsecond=0)
+
+        view = None
+        match = Season.get_match(message.channel.id)
+
+        if match and next_day:
+            view = Schedule(match, result)
+
+        await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == 0 else "F"}>", view=view)
 
 
     @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
@@ -338,6 +424,28 @@ class Finalize_KO(Modal):
 
 
 
+class Schedule(View):
+    def __init__(self, match: Match, date_time: datetime):
+        self.match = match
+        self.datetime = date_time
 
+        super().__init__(timeout=None)
 
+    @add_button(label="Schedule", style=disnake.ButtonStyle.blurple, emoji=Emote.HAPPY_HAX)
+    async def callback(self, _: Button, interaction: ModalInter):
+        event_name = f"{self.match.teams[0].code} vs {self.match.teams[1].code}"
 
+        event = next((e for e in self.match.season.guild.scheduled_events
+                      if e.name.casefold() == event_name.casefold()), None)
+
+        if event:
+            await event.edit(scheduled_start_time=self.datetime)
+            await interaction.send(f"This match has been rescheduled to <t:{int(self.datetime.timestamp())}:F>.")
+        else:
+            new_event = await self.match.season.guild.create_scheduled_event(
+                name= event_name,
+                scheduled_start_time=self.datetime,
+                channel=self.match.season.guild.voice_channels[0]
+            )
+            await interaction.send(f"This match has been scheduled for <t:{int(self.datetime.timestamp())}:F>!\n"
+                                   f"{new_event.url}")

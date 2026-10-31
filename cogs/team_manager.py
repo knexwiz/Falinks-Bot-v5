@@ -1,7 +1,6 @@
 from cogs.shared.auto_imports import *
 from cogs.shared.season import Season
 
-
 class Cog(commands.Cog, name="Team Manager"):
 
     def __init__(self, bot):
@@ -20,6 +19,29 @@ class Cog(commands.Cog, name="Team Manager"):
                     await end_dashboard_cycle(channel=channel)
 
         print("  Dashboard ready")
+
+    @slash()
+    @require_team(fail_message="In order to track that information, you need to have a team."
+                               "Create a team in the Team Dashboard")
+    async def set_timezone(self, interaction: SlashInter, team: Team, utc_offset: commands.Range[int, -12, 12],):
+        """Pick the Pokémon you want durring a draft.
+
+        Parameters
+        ----------
+        interaction: Slash Command Interaction
+        team: Filled in from @require_team and hidden from the command registration.
+        utc_offset: current offset from UTC
+        """
+        team.utc_offset = utc_offset
+        team.reflect()
+
+        now = datetime.now(timezone(timedelta(hours=utc_offset)))
+
+        await interaction.send(f"Your timezone has been updated. "
+                               f"If the current time is {now.strftime("%I:%M %p")}, you have done this correctly.",
+                               ephemeral=True)
+
+
 
 
 #######################################################################################################################

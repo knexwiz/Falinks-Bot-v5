@@ -7,3 +7,4 @@
 /cogs/shared/emotes/__pycache__
 /cogs/shared/sheets/__pycache__
 /utils/__pycache
+*.pyc

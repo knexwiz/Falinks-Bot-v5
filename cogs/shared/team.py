@@ -17,7 +17,7 @@ class Team:
         self.code = code.upper()
         self.logo = logo
         self.emote = emote
-        self.utc_offset = utc_offset
+        self.utc_offset = int(utc_offset)
         self.player_name = existing_player
 
         self.season_list = []
