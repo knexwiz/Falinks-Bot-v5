@@ -153,8 +153,8 @@ class Season:
     def roster_embed(self, team: Team, *, embed: disnake.Embed | None = None) -> disnake.Embed:
         v = "".join([(str(p.emote) if p.emote else str(p)) for p in self.roster(team)])
 
-        if embed is None: return team.embed.add_field("Roster", value=v)
-        else: embed.add_field(name=str(self), value=v)
+        if embed is None: return team.embed.add_field("Roster", value=v, inline=False)
+        else: embed.add_field(name=str(self), value=v, inline=False)
         return embed
 
     def tier(self, pokemon: Pokemon) -> int | str | None:

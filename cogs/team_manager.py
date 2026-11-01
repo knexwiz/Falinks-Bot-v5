@@ -3,23 +3,29 @@ from cogs.shared.season import Season
 
 from datetime import datetime, timedelta, timezone
 
+dashboard_views: dict[int, TeamDashboard] = {}
 
 class Cog(commands.Cog, name="Team Manager"):
 
     def __init__(self, bot):
-        self.bot = bot
-
+        self.bot: commands.Bot = bot
+        self.persistent_added: bool = False
 
     @commands.Cog.listener()
     async def on_ready(self):
-        initialize_teams(self.bot)
 
-        for gid in get_active_guild_ids():
-            guild = self.bot.get_guild(gid)
-            for channel in guild.text_channels:
-                if channel.name == "team-dashboard":
-                    #await channel.purge()
-                    await end_dashboard_cycle(channel=channel)
+        if not self.persistent_added:
+            initialize_teams(self.bot)
+
+            for gid in get_active_guild_ids():
+                guild = self.bot.get_guild(gid)
+
+                if guild:
+                    view = TeamDashboard(guild)
+                    self.bot.add_view(view)
+                    dashboard_views[gid] = view
+
+            self.persistent_added = True
 
         print("  Dashboard ready")
 
@@ -46,7 +52,27 @@ class Cog(commands.Cog, name="Team Manager"):
                                ephemeral=True)
 
 
+    @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
+    async def cycle_team_dashboard(self, interaction: SlashInter):
+        """Sends a new dashboard.
 
+        Parameters
+        ----------
+        interaction: Slash Command Interaction
+        """
+        await interaction.response.defer(ephemeral=True)
+        if interaction.channel.name == "team-dashboard" and interaction.channel.id in dashboard_views:
+            old_view = dashboard_views.pop(interaction.channel.id)
+            if old_view in self.bot.persistent_views:
+                self.bot.persistent_views.remove(old_view)
+            new_view = TeamDashboard(guild)
+            self.bot.add_view(new_view)
+            dashboard_views[gid] = new_view
+
+            await end_dashboard_cycle(channel=interaction.channel)
+            await interaction.send("Done!", ephemeral=True)
+        else:
+            await interaction.send("not here...", ephemeral=True)
 
 #######################################################################################################################
 #############################                       Dashboard Cycle                       #############################
@@ -77,8 +103,7 @@ async def start_dashboard_cycle(channel: disnake.TextChannel | Any, hold_text: s
 
 async def end_dashboard_cycle(channel: disnake.TextChannel | Any, content: str | None = None,
                               *, embeds: list[disnake.Embed] | None = None) -> disnake.Message:
-    dash_view = TeamDashboard()
-    dash_view.add_guild_specific(channel.guild)
+    dash_view = dashboard_views[channel.guild.id]
 
     e = [*embeds, dash_embed] if embeds else [dash_embed]
     m = await channel.send(content, view=dash_view, embeds=e)
@@ -96,35 +121,8 @@ async def end_dashboard_cycle(channel: disnake.TextChannel | Any, content: str |
 
 
 class TeamDashboard(View):
-
-    def __init__(self):
-      super().__init__(timeout=None)
-
-    @add_button(label="Update Team // New Team", style=disnake.ButtonStyle.green, emoji=Emote.MARO_COOLGUY)
-    async def modify_team(self, _: Button, interaction: ViewInter):
-        team = Team.get(interaction.author)
-
-        if team is None:
-            await interaction.response.send_modal(TeamCreate())
-        else:
-            await interaction.response.send_modal(TeamUpdate(team))
-
-    @add_button(label="Team Roster", style=disnake.ButtonStyle.grey, emoji=Emote.TERA_CROWN)
-    @require_team()
-    async def team_roster(self, _: Button, interaction: ViewInter, team: Team):
-        active_seasons = [season for season in team.season_list if season.roster(team)]
-
-        e = team.embed
-
-        for season in active_seasons:
-            for mon in season.roster(team):
-                await mon.fetch_emote()
-
-        for season in active_seasons: season.roster_embed(team, embed=e)
-
-        await end_dashboard_cycle(interaction.channel, embeds=[e])
-
-    def add_guild_specific(self, guild: disnake.Guild):
+    def __init__(self, guild: disnake.Guild):
+        super().__init__(timeout=None)
         waivers = False
         for season in Season.list_by_guild(guild):
             if season.signups_open:
@@ -136,6 +134,32 @@ class TeamDashboard(View):
         if waivers:
             self.add_item(Waiver_Button())
             self.add_item(Trade_Button())
+
+    @add_button(label="Update Team // New Team", style=disnake.ButtonStyle.green,
+                emoji=Emote.MARO_COOLGUY, custom_id="modify_team")
+    async def modify_team(self, _: Button, interaction: ViewInter):
+        team = Team.get(interaction.author)
+
+        if team is None:
+            await interaction.response.send_modal(TeamCreate())
+        else:
+            await interaction.response.send_modal(TeamUpdate(team))
+
+    @add_button(label="Team Roster", style=disnake.ButtonStyle.grey, emoji=Emote.TERA_CROWN, custom_id="team_roster")
+    @require_team()
+    async def team_roster(self, _: Button, interaction: ViewInter, team: Team):
+        await interaction.response.defer()
+        active_seasons = [season for season in team.season_list if season.roster(team)]
+
+        e = team.embed
+
+        for season in active_seasons:
+            for mon in season.roster(team):
+                await mon.fetch_emote()
+
+        for season in active_seasons: season.roster_embed(team, embed=e)
+
+        await end_dashboard_cycle(interaction.channel, embeds=[e])
 
 
 #######################################################################################################################
@@ -494,7 +518,8 @@ class Signup_Button(Button):
         super().__init__(
             label= f"Signup for {str(season)[:65]}",
             style=ButtonStyle.blurple,
-            emoji=Emote.HAPPY_HAX
+            emoji=Emote.HAPPY_HAX,
+            custom_id=f"signup_{self.season.sheet.id}"
         )
 
     @require_team(fail_message="You need to make a Team before you can signup!")
@@ -522,7 +547,8 @@ class Waiver_Button(Button):
         super().__init__(
             label= f"Wiaver Pokémon",
             style=ButtonStyle.red,
-            emoji=Emote.TORKOAL_ANGRY
+            emoji=Emote.TORKOAL_ANGRY,
+            custom_id="waiver"
         )
 
     @require_team()
@@ -622,11 +648,13 @@ class Trade_Button(Button):
         super().__init__(
             label=f"Trade Pokémon",
             style=ButtonStyle.red,
-            emoji=Emote.VANILUXE_EVIL
+            emoji=Emote.VANILUXE_EVIL,
+            custom_id="trade"
         )
 
     @require_team()
     async def callback(self, interaction: ViewInter, team: Team):
+        await interaction.response.defer(ephemeral=True)
         waiver_seasons = [season for season in team.season_list if season.waivers_open and len(season.roster(team))]
 
         if not waiver_seasons:
@@ -729,7 +757,7 @@ class Trade(Modal):
         await interaction.channel.send(f"{self.other_team}: {self.user_team} has proposed a trade!\n"
                                        f"{self.user_team} gets {other_mon.mention}.\n"
                                        f"{self.other_team} get {user_mon.mention}.\n",
-                                       view=View(timeout=None).add_item(TradeFinalize(
+                                       view=View(timeout=3600).add_item(TradeFinalize(
                                            self.user_team,self.season,self.other_team,user_mon,other_mon)))
         await end_dashboard_cycle(interaction.channel)
 

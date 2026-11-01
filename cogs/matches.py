@@ -3,17 +3,34 @@ from datetime import datetime, timedelta, timezone
 
 days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
+
 class Cog(commands.Cog, name="Matches"):
 
     def __init__(self, bot):
         self.bot = bot
         self.matches_to_post: list[Match] = []
+        self.persistent_added: bool = False
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if not self.persistent_added:
+            CloseView()
+            self.bot.add_view(CloseView.eternal)
+            self.persistent_added = True
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
         if message.author == self.bot.user: return
 
         team = Team.get(message.author)
+        match = Season.get_match(message.channel.id)
+
+        if match:
+            for role in message.role_mentions:
+                if role.name.casefold() == "mod":
+                    if not message.channel.permissions_for(role).view_channel:
+                        await message.channel.set_permissions(role, view_channel=True)
+                        await message.reply(f"{role.mention} has been add to the channel.")
 
         if team is None: return
 
@@ -89,12 +106,14 @@ class Cog(commands.Cog, name="Matches"):
         result = future_date.replace(hour=hours, minute=mins, second=0, microsecond=0)
 
         view = None
-        match = Season.get_match(message.channel.id)
 
         if match and next_day > -1:
             view = Schedule(match, result)
 
-        await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
+        m = await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
+
+        if view:
+            view.message = m
 
 
     @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
@@ -106,6 +125,7 @@ class Cog(commands.Cog, name="Matches"):
         interaction: Slash Command Interaction
         week: The week to post matches for.
         """
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if not guild:
             await interaction.send("You should only use this is a server...", ephemeral=True)
@@ -123,7 +143,6 @@ class Cog(commands.Cog, name="Matches"):
         if not seasons:
             await interaction.send("There are no active seasons with matches for that week...", ephemeral=True)
         elif len(seasons) == 1:
-            await interaction.response.defer()
             await post_matches(seasons[0])
         else:
             await interaction.send("Chose a season to post matches for:", ephemeral=True,
@@ -188,14 +207,19 @@ class Cog(commands.Cog, name="Matches"):
         interaction: Slash Command Interaction
         team: Filled in from @require_team and hidden from the command registration.
         """
+        await interaction.response.defer()
+
         match = Season.get_match(interaction.channel.id)
 
         if not match:
             await interaction.response.send_message("This isn't a match channel...", ephemeral=True)
             return
 
-        await interaction.send(f"Reporting match for {match.teams[0]} vs {match.teams[1]}. Which team won?",
-                               view=ReportView(match))
+
+        view = ReportView(match)
+        m = await interaction.send(f"Reporting match for {match.teams[0]} vs {match.teams[1]}. Which team won?",
+                               view=view)
+        view.message = m
 
     @slash()
     @require_team()
@@ -207,25 +231,31 @@ class Cog(commands.Cog, name="Matches"):
         interaction: Slash Command Interaction
         team: Filled in from @require_team and hidden from the command registration.
         """
+
         match = Season.get_match(interaction.channel.id)
 
         if not match:
             await interaction.response.send_message("This isn't a match channel...", ephemeral=True)
             return
 
-        for pokemon in match.season.roster(team):
-            await pokemon.fetch_emote()
-
         await interaction.response.send_modal(KOStart(match, team))
 
 class ReportView(View):
     def __init__(self, match: Match):
-        super().__init__(timeout=None)
+        self.message: disnake.Message | None = None
+        super().__init__(timeout=3600)
 
         self.add_item(ScoreButton(match, 0, 0))
         self.add_item(ScoreButton(match, 0, 1))
         self.add_item(ScoreButton(match, 1, 0))
         self.add_item(ScoreButton(match, 1, 1))
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(content= f"{self.message.content}\nTIMED OUT.", view=None)
+            except disnake.HTTPException:
+                pass
 
 
 class ScoreButton(Button):
@@ -249,22 +279,27 @@ class ScoreButton(Button):
         await interaction.message.edit(
             f"Match has been reported by {interaction.author.mention} as a 2-{self.loose_score} win"
             f"for {self.match.teams[self.win_team_index].mention}",
-            view=View().add_item(CloseButton(match=self.match))
+            view=CloseView.eternal
         )
 
 
-class CloseButton(Button):
-    def __init__(self, match: Match):
-        self.match: Match = match
+class CloseView(View):
+    eternal: CloseView | None = None
 
-        super().__init__(
-            label="Close Channel",
-            style=disnake.ButtonStyle.red
-        )
+    def __init__(self):
+        super().__init__(timeout=None)
+        CloseView.eternal = self
 
-    async def callback(self, interaction: ViewInter):
-        if self.match.kos_recorded or interaction.author.guild_permissions.manage_webhooks:
-            await interaction.response.defer()
+    @disnake.ui.button(label="Close Channel", style=disnake.ButtonStyle.red, custom_id="close_match")
+    async def close_match(self, _: Button, interaction: ViewInter):
+        await interaction.response.defer()
+        match = Season.get_match(interaction.channel.id)
+
+        if match is None:
+            await interaction.send("I dont even understand how you did that...")
+            return
+
+        if match.kos_recorded or interaction.author.guild_permissions.manage_webhooks:
             await interaction.channel.delete(reason="Match completed")
         else:
             await interaction.send(
@@ -334,24 +369,38 @@ class KOStart(Modal):
         )
 
     async def callback(self, interaction: ModalInter):
+        await interaction.response.defer()
         mons = [p for p in self.match.season.roster(self.team) if p.dex in interaction.resolved_values["kos"]]
+
+        for pokemon in mons:
+            await pokemon.fetch_emote()
 
         kos = KO_Counter(match=self.match, team=self.team, pokemon_list=mons)
 
-        await interaction.send(kos.input_string, view=KO_View(kos))
+        view = KO_View(kos)
+        m = await interaction.send(kos.input_string, view=view)
+        view.message = m
 
 
 class KO_View(View):
     def __init__(self, kos: KO_Counter):
         self.kos = kos
+        self.message: disnake.Message | None = None
 
-        super().__init__(timeout=None)
+        super().__init__(timeout=10800)
 
         for mon in self.kos.pokemon_list:
             self.add_item(KO_Button(self.kos, mon))
 
         self.add_item(Undo_KO_Button(kos))
         self.add_item(KO_Report_Button(kos))
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(content= f"{self.message.content}\nTIMED OUT.", view=None)
+            except disnake.HTTPException:
+                pass
 
 
 class KO_Button(Button):
@@ -366,7 +415,7 @@ class KO_Button(Button):
         )
 
     async def callback(self, interaction: ViewInter):
-        await interaction.response.defer()
+        await interaction.response.defer(with_message=False)
         self.kos.add_ko(self.pokemon.dex)
         await interaction.message.edit(content=self.kos.input_string)
 
@@ -380,7 +429,7 @@ class Undo_KO_Button(Button):
         )
 
     async def callback(self, interaction: ViewInter):
-        await interaction.response.defer()
+        await interaction.response.defer(with_message=False)
         if not self.kos.history: return
         self.kos.undo_ko()
         await interaction.message.edit(content=self.kos.input_string)
@@ -431,11 +480,13 @@ class Schedule(View):
     def __init__(self, match: Match, date_time: datetime):
         self.match = match
         self.datetime = date_time
+        self.message: disnake.Message | None = None
 
-        super().__init__(timeout=None)
+        super().__init__(timeout=86400)
 
     @add_button(label="Schedule", style=disnake.ButtonStyle.blurple, emoji=Emote.HAPPY_HAX)
     async def callback(self, _: Button, interaction: ModalInter):
+        await interaction.response.defer()
         event_name = f"{self.match.teams[0].code} vs {self.match.teams[1].code}"
 
         event = next((e for e in self.match.season.guild.scheduled_events
@@ -452,3 +503,10 @@ class Schedule(View):
             )
             await interaction.send(f"This match has been scheduled for <t:{int(self.datetime.timestamp())}:F>!\n"
                                    f"{new_event.url}")
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except disnake.HTTPException:
+                pass
