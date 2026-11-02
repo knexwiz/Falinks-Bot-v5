@@ -6,5 +6,8 @@
 /cogs/shared/__pycache__
 /cogs/shared/emotes/__pycache__
 /cogs/shared/sheets/__pycache__
-/utils/__pycache
+/utils/__pycache__
+**/__pycache__/
 *.pyc
+*.pyo
+*.pyd
