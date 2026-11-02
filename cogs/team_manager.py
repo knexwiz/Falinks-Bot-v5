@@ -663,10 +663,10 @@ class Trade_Button(Button):
             await interaction.send("Chose a team to trade with:",
                                    view=View().add_item(TradeTeamSelector(team, waiver_seasons[0])), ephemeral=True)
         else:
-            followup = lambda t, s: View().add_item(TradeTeamSelector(t, s))
+            followup = lambda t, season: View().add_item(TradeTeamSelector(t, season))
             await interaction.send("You are in multiple seasons. Please chose one:",
                                    view=View().add_item(SeasonSelector(waiver_seasons, followup,
-                                                follow_up_text="Chose a team to trade with:", team=team)),
+                                                follow_up_text="Chose a team to trade with:", t=team)),
                                    ephemeral=True)
 
 
