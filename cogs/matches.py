@@ -110,10 +110,10 @@ class Cog(commands.Cog, name="Matches"):
         if match and next_day > -1:
             view = Schedule(match, result)
 
-        m = await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
+        await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
 
         if view:
-            view.message = m
+            view.message = await interaction.original_response()
 
 
     @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
@@ -217,9 +217,9 @@ class Cog(commands.Cog, name="Matches"):
 
 
         view = ReportView(match)
-        m = await interaction.send(f"Reporting match for {match.teams[0]} vs {match.teams[1]}. Which team won?",
+        await interaction.send(f"Reporting match for {match.teams[0]} vs {match.teams[1]}. Which team won?",
                                view=view)
-        view.message = m
+        view.message = await interaction.original_response()
 
     @slash()
     @require_team()
@@ -238,7 +238,33 @@ class Cog(commands.Cog, name="Matches"):
             await interaction.response.send_message("This isn't a match channel...", ephemeral=True)
             return
 
-        await interaction.response.send_modal(KOStart(match, team))
+        if team in match.teams:
+            await interaction.response.send_modal(KOStart(match, team))
+        else:
+            await interaction.send("What team do you want to report kos for?", view=ko_team_selector(match),
+                                   ephemeral=True)
+
+class ko_team_selector(View):
+    def __init__(self, match: Match):
+        super().__init__(timeout=3600)
+        self.add_item(StartKO_Button(match, team=match.teams[0]))
+        self.add_item(StartKO_Button(match, team=match.teams[1]))
+
+
+class StartKO_Button(Button):
+    def __init__(self, match: Match, team: Team):
+        self.match = match
+        self.team = team
+        super().__init__(
+            label=self.team.code,
+            emoji=self.team.emote,
+            style=disnake.ButtonStyle.blurple
+        )
+
+    async def callback(self, interaction: ViewInter):
+        await interaction.response.send_modal(KOStart(self.match, self.team))
+
+
 
 class ReportView(View):
     def __init__(self, match: Match):
@@ -364,6 +390,18 @@ class KOStart(Modal):
                             for p in match.season.roster(team)
                         ]
                     )
+                ),
+                Label(
+                    text="Express Entry",
+                    description="Enter starting KOs as digits with no spacing,"
+                                "in the order of selected Pokémon (ex 050120)",
+                    component=disnake.ui.TextInput(
+                        custom_id="express",
+                        style=disnake.TextInputStyle.short,
+                        max_length=8,
+                        min_length=6,
+                        required=False
+                    )
                 )
             ]
         )
@@ -377,9 +415,38 @@ class KOStart(Modal):
 
         kos = KO_Counter(match=self.match, team=self.team, pokemon_list=mons)
 
-        view = KO_View(kos)
-        m = await interaction.send(kos.input_string, view=view)
-        view.message = m
+        if len(interaction.resolved_values["express"]) == len(mons) and interaction.resolved_values["express"].isdigit():
+            for i in range(len(mons)):
+                amount = int(interaction.resolved_values["express"][i])
+                while amount > 0:
+                    kos.add_ko(mons[i].dex)
+                    amount -= 1
+
+
+        if not self.match.finished:
+            view = KO_View(kos)
+            await interaction.send(kos.input_string, view=view)
+            view.message = await interaction.original_response()
+        else:
+            await interaction.send(f"KOs are ready to be input for {self.team.mention}. "
+                                   f"Click to reveal once the game has begun.",
+                                       view=KO_hidden(kos,interaction.author))
+
+
+class KO_hidden(View):
+    def __init__(self, kos, author):
+        self.kos = kos
+        self.author = author
+        super().__init__(timeout=3600)
+
+    @add_button(label="Reveal Counter", style=disnake.ButtonStyle.green,
+                emoji=Emote.DRACO_KIFE)
+    async def reveal(self, _: Button, interaction: ViewInter):
+        await interaction.response.defer(with_message=False)
+        if self.author == interaction.author or interaction.author.guild_permissions.administrator:
+            view = KO_View(self.kos)
+            await interaction.message.edit(content=self.kos.input_string, view=view)
+            view.message = interaction.message
 
 
 class KO_View(View):
@@ -455,24 +522,18 @@ class Finalize_KO(Modal):
             title="Finalize KOs",
             components=[
                 disnake.ui.TextDisplay(
-                    content=f"Please confirm that the following KOs are correct:\n\n{self.kos.formal_string}"
-                ),
-                Label(
-                    text="These KOs are correct.",
-                    description="Leaving unchecked will let you go back and make edits",
-                    component=disnake.ui.Checkbox(custom_id="confirmed")
+                    content=f"Please confirm that the following KOs are correct:\n\n{self.kos.formal_string}\n\n"
+                            f"If there are any errors, click cancel to continue entering KOs."
                 )
             ]
         )
 
     async def callback(self, interaction: ModalInter):
-
         await interaction.response.defer(with_message=False)
-        if interaction.resolved_values["confirmed"]:
-            result = next((r for r in self.kos.match.results if r.team == self.kos.team), None)
-            result.kos = self.kos.sheet_string
-            self.kos.match.season.reflect_match(self.kos.match)
-            await interaction.message.edit(content=self.kos.final_string, view=None)
+        result = next((r for r in self.kos.match.results if r.team == self.kos.team), None)
+        result.kos = self.kos.sheet_string
+        self.kos.match.season.reflect_match(self.kos.match)
+        await interaction.message.edit(content=self.kos.final_string, view=None)
 
 
 
