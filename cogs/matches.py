@@ -520,6 +520,7 @@ class KO_Report_Button(Button):
 class Finalize_KO(Modal):
     def __init__(self, kos: KO_Counter, parent):
         self.kos = kos
+        self.parent = parent
 
         super().__init__(
             title="Finalize KOs",
