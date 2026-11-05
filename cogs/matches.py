@@ -271,10 +271,10 @@ class ReportView(View):
         self.message: disnake.Message | None = None
         super().__init__(timeout=3600)
 
-        self.add_item(ScoreButton(match, 0, 0))
-        self.add_item(ScoreButton(match, 0, 1))
-        self.add_item(ScoreButton(match, 1, 0))
-        self.add_item(ScoreButton(match, 1, 1))
+        self.add_item(ScoreButton(match, 0, 0, self))
+        self.add_item(ScoreButton(match, 0, 1, self))
+        self.add_item(ScoreButton(match, 1, 0, self))
+        self.add_item(ScoreButton(match, 1, 1, self))
 
     async def on_timeout(self):
         if self.message:
@@ -285,10 +285,11 @@ class ReportView(View):
 
 
 class ScoreButton(Button):
-    def __init__(self, match: Match, win_team_index: int, loose_score: int):
+    def __init__(self, match: Match, win_team_index: int, loose_score: int, parent):
         self.match: Match = match
         self.win_team_index: int = win_team_index
         self.loose_score: int = loose_score
+        self.parent = parent
 
         super().__init__(
             label=f"{match.teams[win_team_index].code} 2-{loose_score}",
@@ -301,6 +302,7 @@ class ScoreButton(Button):
         self.match.results[self.win_team_index].score = 2
         self.match.results[0 if self.win_team_index == 1 else 1].score = self.loose_score
         self.match.season.reflect_match(match=self.match)
+        self.parent.message = False
 
         await interaction.message.edit(
             f"Match has been reported by {interaction.author.mention} as a 2-{self.loose_score} win"
@@ -460,7 +462,7 @@ class KO_View(View):
             self.add_item(KO_Button(self.kos, mon))
 
         self.add_item(Undo_KO_Button(kos))
-        self.add_item(KO_Report_Button(kos))
+        self.add_item(KO_Report_Button(kos, self))
 
     async def on_timeout(self):
         if self.message:
@@ -502,8 +504,9 @@ class Undo_KO_Button(Button):
         await interaction.message.edit(content=self.kos.input_string)
 
 class KO_Report_Button(Button):
-    def __init__(self, kos: KO_Counter):
+    def __init__(self, kos: KO_Counter, parent):
         self.kos = kos
+        self.parent = parent
 
         super().__init__(
             label="Report",
@@ -511,11 +514,11 @@ class KO_Report_Button(Button):
         )
 
     async def callback(self, interaction: ViewInter):
-        await interaction.response.send_modal(Finalize_KO(self.kos))
+        await interaction.response.send_modal(Finalize_KO(self.kos, self.parent))
 
 
 class Finalize_KO(Modal):
-    def __init__(self, kos: KO_Counter):
+    def __init__(self, kos: KO_Counter, parent):
         self.kos = kos
 
         super().__init__(
@@ -533,6 +536,7 @@ class Finalize_KO(Modal):
         result = next((r for r in self.kos.match.results if r.team == self.kos.team), None)
         result.kos = self.kos.sheet_string
         self.kos.match.season.reflect_match(self.kos.match)
+        self.parent.message = None
         await interaction.message.edit(content=self.kos.final_string, view=None)
 
 
