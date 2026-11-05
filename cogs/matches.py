@@ -113,7 +113,7 @@ class Cog(commands.Cog, name="Matches"):
         await message.reply(f"<t:{int(result.timestamp())}:{"t" if next_day == -1 else "F"}>", view=view)
 
         if view:
-            view.message = await interaction.original_response()
+            view.message = await message
 
 
     @slash(default_member_permissions=disnake.Permissions(manage_webhooks=True))
