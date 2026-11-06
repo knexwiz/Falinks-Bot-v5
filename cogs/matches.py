@@ -47,10 +47,11 @@ class Cog(commands.Cog, name="Matches"):
         current_day = datetime.now(timezone(timedelta(hours=team.utc_offset)))
 
         if request_dow in days:
-            next_day = 7 - current_day.weekday() + days.index(request_dow)
-            if next_day == 8: next_day = 1
+            next_day =  [*days[current_day.weekday()+1:],*days[:current_day.weekday()+1]].index(request_dow)
         if request_dow == "tod":
             next_day=0
+        if request_dow == "tom":
+            next_day=1
 
         hm = ""
         ap = ""
