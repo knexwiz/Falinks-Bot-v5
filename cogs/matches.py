@@ -224,13 +224,14 @@ class Cog(commands.Cog, name="Matches"):
 
     @slash()
     @require_team()
-    async def ko(self, interaction: SlashInter, team: Team):
+    async def ko(self, interaction: SlashInter, team: Team, adds: str = ""):
         """Generates a KO counter in your Match channel to use during your game.
 
         Parameters
         ----------
         interaction: Slash Command Interaction
         team: Filled in from @require_team and hidden from the command registration.
+        adds: Use to include Pokémon not currently on your team. Comma separated for multiple.
         """
 
         match = Season.get_match(interaction.channel.id)
@@ -240,22 +241,23 @@ class Cog(commands.Cog, name="Matches"):
             return
 
         if team in match.teams:
-            await interaction.response.send_modal(KOStart(match, team))
+            await interaction.response.send_modal(KOStart(match, team, adds))
         else:
-            await interaction.send("What team do you want to report kos for?", view=ko_team_selector(match),
+            await interaction.send("What team do you want to report kos for?", view=ko_team_selector(match, adds),
                                    ephemeral=True)
 
 class ko_team_selector(View):
-    def __init__(self, match: Match):
+    def __init__(self, match: Match, adds: str):
         super().__init__(timeout=3600)
-        self.add_item(StartKO_Button(match, team=match.teams[0]))
-        self.add_item(StartKO_Button(match, team=match.teams[1]))
+        self.add_item(StartKO_Button(match, team=match.teams[0], adds = adds))
+        self.add_item(StartKO_Button(match, team=match.teams[1], adds = adds))
 
 
 class StartKO_Button(Button):
-    def __init__(self, match: Match, team: Team):
+    def __init__(self, match: Match, team: Team, adds: str):
         self.match = match
         self.team = team
+        self.adds = adds
         super().__init__(
             label=self.team.code,
             emoji=self.team.emote,
@@ -263,7 +265,7 @@ class StartKO_Button(Button):
         )
 
     async def callback(self, interaction: ViewInter):
-        await interaction.response.send_modal(KOStart(self.match, self.team))
+        await interaction.response.send_modal(KOStart(self.match, self.team, self.adds))
 
 
 
@@ -376,42 +378,76 @@ class KO_Counter:
 
 
 class KOStart(Modal):
-    def __init__(self, match: Match, team: Team):
+    def __init__(self, match: Match, team: Team, adds: str):
         self.match: Match = match
         self.team: Team = team
 
-        super().__init__(
-            title="KOs",
-            components=[
+        add_mons = [Pokemon.get(p.strip()) for p in adds.split(",")]
+        options = [
+            disnake.GroupOption(label=str(p), value=p.dex)
+            for p in [*match.season.roster(team), *[p for p in add_mons if p is not None]]
+        ]
+
+        components = [
+            Label(
+                text="Select Pokémon that you brought this week.",
+                component=disnake.ui.CheckboxGroup(
+                    min_values= 6 if len(options) <= 10 else 1,
+                    custom_id="kos",
+                    options=options[:10],
+                    required = True if len(options) <= 10 else False
+                )
+            )
+        ]
+
+        if len(options) > 10:
+            components.append(
                 Label(
-                    text="Select Pokémon that you brought this week.",
+                    text="Pokémon continued:",
                     component=disnake.ui.CheckboxGroup(
-                        min_values=6,
-                        custom_id="kos",
-                        options=[
-                            disnake.GroupOption(label=str(p), value=p.dex)
-                            for p in match.season.roster(team)
-                        ]
-                    )
-                ),
-                Label(
-                    text="Express Entry",
-                    description="Enter starting KOs as digits with no spacing,"
-                                "in the order of selected Pokémon (ex 050120)",
-                    component=disnake.ui.TextInput(
-                        custom_id="express",
-                        style=disnake.TextInputStyle.short,
-                        max_length=8,
-                        min_length=6,
-                        required=False
+                        min_values=1,
+                        custom_id="kos2",
+                        options=options[10:],
+                        required = False
                     )
                 )
-            ]
+            )
+
+        components.append(
+            Label(
+                text="Express Entry",
+                description="Enter starting KOs as digits with no spacing,"
+                            "in the order of selected Pokémon (ex 050120)",
+                component=disnake.ui.TextInput(
+                    custom_id="express",
+                    style=disnake.TextInputStyle.short,
+                    max_length=8,
+                    min_length=6,
+                    required=False
+                )
+            )
+        )
+
+        super().__init__(
+            title="KOs",
+            components=components
         )
 
     async def callback(self, interaction: ModalInter):
         await interaction.response.defer()
-        mons = [p for p in self.match.season.roster(self.team) if p.dex in interaction.resolved_values["kos"]]
+
+        gets = interaction.resolved_values["kos"]
+        if "kos2" in interaction.resolved_values:
+            gets.extend(interaction.resolved_values["kos2"])
+
+        # add in team order before relooping through the list
+        mons = [p for p in self.match.season.roster(self.team) if p.dex in gets]
+
+        for d in gets:
+            poke = Pokemon.get(d)
+            if poke is not None and poke not in mons:
+                mons.append(poke)
+
 
         for pokemon in mons:
             await pokemon.fetch_emote()
